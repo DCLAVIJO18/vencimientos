@@ -1,4 +1,4 @@
-<title>Vencimientos en Tienda</title>
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style></head><body><title>Vencimientos en Tienda</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
@@ -23,6 +23,7 @@
   --crit:#ef7a7a; --crit-bg:#3d1c1c; --high:#f0946d; --high-bg:#3b2219; --mid:#f5c04a; --mid-bg:#3a2e10; --good:#5fcf86; --good-bg:#15301f;
   --shadow:0 10px 30px rgba(0,0,0,.5); color-scheme:dark}
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:30;background:var(--accent)}
 .wrap{max-width:640px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 96px}
@@ -75,6 +76,14 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;backgroun
 .search{position:relative}
 .search input{width:100%;background:var(--surface);border:1.5px solid var(--line);border-radius:12px;padding:12px 12px 12px 40px;font-size:16px}
 .search input:focus{border-color:var(--accent);outline:none}
+.search input{padding-right:44px}
+.search input::-webkit-search-cancel-button{-webkit-appearance:none}
+.q-x{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;border-radius:50%;background:var(--surface-2);color:var(--fg-2);font-size:20px;line-height:1}
+.q-n{margin:-2px 2px 0}
+/* Mientras se busca (teclado abierto en el celular): solo quedan la barra, el buscador y los resultados */
+body.searching .prog, body.searching #brandPick, body.searching #estados, body.searching #secs, body.searching .suc-btn, body.searching .sendbar{display:none!important}
+body.searching .tools{position:sticky;top:calc(env(safe-area-inset-top,0px) + var(--hh,60px));z-index:15;background:var(--bg);padding-block:10px 8px;margin-inline:-4px;padding-inline:4px}
+body.searching .list{margin-top:4px}
 .search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:18px;height:18px;stroke:var(--muted)}
 .chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
 .chips::-webkit-scrollbar{display:none}
@@ -195,8 +204,10 @@ header.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;backgroun
       </div>
       <div class="search">
         <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="q" type="search" placeholder="Código o nombre del producto" autocomplete="off" aria-label="Buscar producto">
+        <input id="q" type="search" enterkeyhint="search" placeholder="Código o nombre del producto" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" aria-label="Buscar">
+        <button class="q-x" id="qX" type="button" aria-label="Borrar búsqueda" hidden>×</button>
       </div>
+      <p class="mu q-n" id="qN" hidden></p>
       <div class="brand-bar" id="brandBar" hidden><div><span class="lbl">Marca</span><b id="brandName"></b></div><button class="chg" id="brandChg">Cambiar marca</button></div>
       <div class="chips" id="estados" role="group" aria-label="Estado"></div>
       <div class="chips" id="secs" role="group" aria-label="Sección"></div>
@@ -316,12 +327,12 @@ function mainView(){
 const save = () => store.set(doneKey(), done);
 /* Paso 1: elegir la marca. Paso 2: solo los SKU de esa marca. */
 function brandView(){
-  fMarca = null; items = all; $('#q').value = ''; $('#q').placeholder = 'Buscar marca';
+  endSearch(); $('#q').blur(); fMarca = null; items = all; $('#q').value = ''; $('#q').placeholder = 'Buscar marca';
   $('#brandBar').hidden = true; $('#estados').hidden = true; $('#secs').hidden = true; $('#brandPick').hidden = false;
   renderProg(); renderBrands(); renderSendBar(); window.scrollTo(0, 0);
 }
 function pickBrand(m){
-  fMarca = m; items = all.filter(it => it.m===m); fEstado = 'pend'; fSec = ''; shown = 60; $('#q').value = ''; $('#q').placeholder = 'Código o nombre del producto';
+  endSearch(); $('#q').blur(); fMarca = m; items = all.filter(it => it.m===m); fEstado = 'pend'; fSec = ''; shown = 60; $('#q').value = ''; $('#q').placeholder = 'Código o nombre del producto';
   $('#brandName').textContent = D.m[m]; $('#brandBar').hidden = false; $('#estados').hidden = false; $('#secs').hidden = false; $('#brandPick').hidden = true;
   renderChips(); renderList(); renderSendBar(); window.scrollTo(0, 0);
 }
@@ -352,11 +363,25 @@ function renderChips(){
 }
 $('#estados').onclick = e => { const b = e.target.closest('button'); if (!b) return; fEstado = b.dataset.e; shown = 60; renderChips(); renderList(); };
 $('#secs').onclick = e => { const b = e.target.closest('button'); if (!b) return; fSec = b.dataset.s; shown = 60; renderChips(); renderList(); };
-$('#q').oninput = () => { shown = 60; fMarca===null ? renderBrands() : renderList(); };
+$('#q').oninput = () => { shown = 60; fMarca===null ? renderBrands() : renderList(); qInfo(); };
+/* Buscador cómodo en el celular: al tocarlo se ocultan avance, cargue masivo y filtros para que los resultados queden visibles sobre el teclado */
+function qInfo(){
+  const v = $('#q').value.trim(); $('#qX').hidden = !v;
+  const n = $('#list').querySelectorAll('.item').length, more = $('#moreBtn');
+  $('#qN').hidden = !v; $('#qN').textContent = v ? (n ? `${n}${more ? '+' : ''} ${fMarca===null ? (n===1 ? 'marca' : 'marcas') : (n===1 ? 'producto' : 'productos')} con "${v}"` : 'Sin resultados') : '';
+}
+$('#q').onfocus = () => { document.body.classList.add('searching'); requestAnimationFrame(() => { document.documentElement.style.setProperty('--hh', $('header.top').offsetHeight + 'px'); window.scrollTo(0, 0); }); };
+$('#q').onblur = () => { setTimeout(() => { if (!$('#q').value.trim() && document.activeElement!==$('#q')) document.body.classList.remove('searching'); }, 150); };
+$('#q').onkeydown = e => { if (e.key==='Enter'){ e.preventDefault(); $('#q').blur(); } };
+$('#qX').onmousedown = e => e.preventDefault();
+$('#qX').onclick = () => { $('#q').value = ''; $('#q').oninput(); $('#q').focus(); };
+function endSearch(){ $('#q').value = ''; $('#qX').hidden = true; $('#qN').hidden = true; document.body.classList.remove('searching'); }
+const _old_endSearch = () => { $('#q').value = ''; $('#qX').hidden = true; $('#qN').hidden = true; document.body.classList.remove('searching'); };
 function filtered(){
   const q = norm($('#q').value.trim()).split(/\s+/).filter(Boolean);
   return items.filter(it => {
     const st = ST(it.pi);
+    if (q.length) return q.every(w => it.key.includes(w));   /* al buscar se busca en todos los productos de la marca, sin filtros ocultos */
     if (fEstado==='pend' && st) return false; if (fEstado==='cola' && st!=='pend') return false;
     if (fEstado==='env' && st!=='env') return false; if (fEstado==='no' && st!=='no') return false;
     if (fSec && it.sec!==fSec) return false;
@@ -639,3 +664,4 @@ let tt; function toast(m){ const t = $('#toast'); t.textContent = m; t.hidden = 
 
 (D.s[cfg.s] && cfg.nombre) ? mainView() : setupView();
 </script>
+</body></html>
