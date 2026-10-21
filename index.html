@@ -237,7 +237,7 @@ body.searching .list{margin-top:4px}
         <li>Toca cada producto y mira cuántas unidades tiene tu tienda en sistema.</li>
         <li>Revisa las fechas en el anaquel y la bodega.</li>
         <li>Reporta lo que vence de <span id="howV"></span>: el mes actual y los 3 siguientes.</li>
-        <li>Al terminar la marca, toca <b>Enviar marca</b> y confirma una sola vez en el formulario.</li>
+        <li>Toca <b>Guardar</b> en cada producto: queda registrado al instante para tu gerente. No hay que enviar nada más.</li>
       </ol>
     </div>
   </section>
@@ -410,7 +410,7 @@ $('#sucBtn').onclick = setupView;
 /* ---------- Lista de productos de la sucursal ---------- */
 /* Estado por SKU en la semana: {s:'no'} sin vencimiento · {s:'pend', l:[lotes]} guardado por enviar · {s:'env', l, t} enviado en el Forms de su marca */
 /* Estado de cada producto de la semana, guardado por código (no por posición) */
-const ST = pi => { const c = D.p[pi][0]; return done[c] ? done[c].s : ''; };
+const ST = pi => { const c = D.p[pi][0]; return done[c] ? (done[c].s==='pend' ? 'env' : done[c].s) : ''; };
 function mainView(){
   const s = D.s[cfg.s]; if (!s){ setupView(); return; }
   $('#setup').hidden = true; $('#main').hidden = false; $('#sucBtn').hidden = false;
@@ -457,7 +457,7 @@ function renderProg(){
 }
 function renderChips(){
   renderProg(); const c = stats(), t = items.length;
-  const est = [['pend','Pendientes', t - c.pend - c.env - c.no], ['cola','Por enviar', c.pend], ['env','Enviados', c.env], ['no','Sin vencimiento', c.no], ['all','Todos', t]];
+  const est = [['pend','Pendientes', t - c.pend - c.env - c.no], ['env','Con vencimiento', c.env], ['no','Sin vencimiento', c.no], ['all','Todos', t]];
   $('#estados').innerHTML = est.map(([k, l, n]) => `<button class="chip" aria-pressed="${k===fEstado}" data-e="${k}">${l}<span class="n num">${n}</span></button>`).join('');
   const secs = [...new Set(items.map(i => i.sec))];
   $('#secs').innerHTML = `<button class="chip" aria-pressed="${!fSec}" data-s="">Todas las secciones</button>` + secs.map(s => `<button class="chip" aria-pressed="${s===fSec}" data-s="${s}">${s.charAt(0) + s.slice(1).toLowerCase()}</button>`).join('');
@@ -489,12 +489,12 @@ function filtered(){
     return q.every(w => it.key.includes(w));
   });
 }
-const tag = st => st==='pend' ? '<span class="st cola">Por enviar</span>' : st==='env' ? '<span class="st env">Enviado</span>' : st==='no' ? '<span class="st ok">Sin vencimiento</span>' : '';
+const tag = st => st==='pend' ? '<span class="st cola">Por enviar</span>' : st==='env' ? '<span class="st env">Con vencimiento</span>' : st==='no' ? '<span class="st ok">Sin vencimiento</span>' : '';
 function renderList(){
   const f = filtered(), el = $('#list');
   if (!f.length){
     const c = stats();
-    el.innerHTML = `<div class="empty">${fEstado==='pend' && !$('#q').value ? `Revisaste todos los productos de ${esc(D.m[fMarca])}${fSec ? ' en esta sección' : ''} esta semana.${c.pend ? ' Toca "Enviar marca" abajo para mandar lo que vence.' : ' Toca "Cambiar marca" para seguir con otra.'}` : 'No hay productos con ese filtro. Prueba con otro nombre o con "Todos".'}</div>`; return; }
+    el.innerHTML = `<div class="empty">${fEstado==='pend' && !$('#q').value ? `Revisaste todos los productos de ${esc(D.m[fMarca])}${fSec ? ' en esta sección' : ''} esta semana. Toca "Cambiar marca" para seguir con otra.` : 'No hay productos con ese filtro. Prueba con otro nombre o con "Todos".'}</div>`; return; }
   el.innerHTML = f.slice(0, shown).map(it => `<button class="item" data-pi="${it.pi}"><span class="d">${esc(it.desc)}${tag(ST(it.pi))}</span>
       <span class="c num">${it.cod} · ${esc(it.casa)}</span><span class="q"><b class="num">${it.u}</b><span>en sistema</span></span></button>`).join('')
     + (f.length > shown ? `<div class="more"><button class="btn ghost" id="moreBtn">Mostrar ${Math.min(60, f.length - shown)} más de ${f.length - shown}</button></div>` : '');
@@ -506,6 +506,7 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '
 /* ---------- Barra "Enviar marca" ---------- */
 const pendOf = m => all.filter(it => (m===null || it.m===m) && ST(it.pi)==='pend');
 function renderSendBar(){
+  $('#sendBar').hidden = true; return;   /* ya no hay envío por Forms: guardar es suficiente */
   const bar = $('#sendBar');
   if (fMarca===null){
     const p = pendOf(null), ms = new Set(p.map(it => it.m));
@@ -536,10 +537,10 @@ function drawSheet(){
   const { it } = cur, el = $('#shIn');
   const head = `<div class="sh-head"><div><h3 id="shTitle">${esc(it.desc)}</h3><p class="mu num">${it.cod} · ${esc(it.casa)}</p></div><button class="x" id="shX" aria-label="Cerrar">×</button></div>`;
   const prev = done[it.cod];
-  const prevTxt = !prev ? '' : prev.s==='no' ? 'sin vencimiento' : prev.s==='pend' ? 'por enviar' : 'enviado';
+  const prevTxt = !prev ? '' : prev.s==='no' ? 'sin vencimiento' : 'con vencimiento';
   el.innerHTML = head + `
     <div class="stock"><div><span class="lbl">Tu tienda tiene en sistema</span><div class="mu">al ${D.f.replace(/\./g,'/')}</div></div><b class="num">${it.u} u</b></div>
-    ${prev ? `<div class="note ${prev.s==='no'?'ok':''}">Esta semana ya lo marcaste como <b>${prevTxt}</b>.${prev.s==='env' ? ' Si lo corriges, vuelve a la lista "por enviar" y sale en el próximo envío de la marca.' : ' Puedes corregirlo.'}</div>` : ''}
+    ${prev ? `<div class="note ${prev.s==='no'?'ok':''}">Esta semana ya lo marcaste como <b>${prevTxt}</b>. Puedes corregirlo.</div>` : ''}
     <div class="ask">¿Hay unidades que vencen entre el ${fmtD(MIND)} y el ${fmtD(MAXD)}?</div>
     <div class="yn"><button class="no" id="aNo" aria-pressed="${cur.ans==='no'}">No<small>Nada vence de ${VENTANA}</small></button>
       <button class="si" id="aSi" aria-pressed="${cur.ans==='si'}">Sí<small>Hay unidades por vencer</small></button></div>
@@ -549,7 +550,7 @@ function drawSheet(){
     </div>
     <p class="err" id="shErr" hidden></p>
     ${cur.ans==='no' ? '<button class="btn" id="saveNo" style="background:var(--good);color:#fff">Guardar: sin vencimiento</button>' : ''}
-    ${cur.ans==='si' ? '<button class="btn" id="saveSi">Guardar en "por enviar"</button><p class="mu" style="margin:0;text-align:center">Se envía junto con los demás productos de la marca.</p>' : ''}`;
+    ${cur.ans==='si' ? '<button class="btn" id="saveSi">Guardar</button><p class="mu" style="margin:0;text-align:center">Queda registrado al instante para tu gerente.</p>' : ''}`;
   $('#shX').onclick = closeSheet;
   $('#aNo').onclick = () => { cur.ans = 'no'; drawSheet(); };
   $('#aSi').onclick = () => { cur.ans = 'si'; drawSheet(); const f = $('#lq0'); if (f && !cur.lotes[0].q) f.focus(); };
@@ -594,8 +595,8 @@ function validate(){
   if (new Set(cur.lotes.map(l => l.d)).size < cur.lotes.length) return fail('Dos lotes tienen la misma fecha: súmalos en uno solo.');
   if (tot > it.u) return fail(`Reportas ${tot} u y el sistema dice ${it.u} u. Vuelve a contar; si de verdad hay más, avisa a tu gerente para ajustar el inventario.`);
   cur.lotes.sort((a, b) => a.d.localeCompare(b.d));
-  done[it.cod] = { s: 'pend', l: cur.lotes.map(l => ({ q: Number(l.q), d: l.d })) }; save(); push([it.cod]);
-  toast('Guardado en "por enviar"'); closeSheet();
+  done[it.cod] = { s: 'env', l: cur.lotes.map(l => ({ q: Number(l.q), d: l.d })), t: Date.now() }; save(); push([it.cod]);
+  toast('Guardado'); closeSheet();
 }
 
 /* ---------- Envío de la marca a Microsoft Forms ----------
@@ -753,12 +754,12 @@ function showUpload(res){
     <div class="up-ok"><div><b class="num">${res.ok.length}</b><span class="mu">productos</span></div><div><b class="num">${lotes}</b><span class="mu">lotes</span></div><div><b class="num">${uds}</b><span class="mu">u por vencer</span></div></div>
     ${res.errs.length ? `<div><span class="lbl" style="color:var(--crit)">${res.errs.length} renglón${res.errs.length===1?'':'es'} con error: no se cargan</span></div><div class="up-err">${res.errs.map(x => `<div>${esc(x)}</div>`).join('')}</div>
       <p class="mu" style="margin:0">Corrígelos en el Excel y vuelve a subirlo, o cárgalos uno a uno en el aplicativo.</p>` : ''}
-    ${res.ok.length ? `<button class="btn" id="upSave">Guardar ${res.ok.length} producto${res.ok.length===1?'':'s'} en "por enviar"</button>` : '<div class="note">No hay renglones válidos para cargar.</div>'}
+    ${res.ok.length ? `<button class="btn" id="upSave">Guardar ${res.ok.length} producto${res.ok.length===1?'':'s'}</button>` : '<div class="note">No hay renglones válidos para cargar.</div>'}
     <button class="btn ghost" id="upCancel">Cancelar</button>`;
   $('#shX').onclick = closeSheet; $('#upCancel').onclick = closeSheet;
   const sv = $('#upSave'); if (sv) sv.onclick = () => {
-    res.ok.forEach(o => { done[o.it.cod] = { s: 'pend', l: o.l }; }); save(); push(res.ok.map(o => o.it.cod));
-    toast(`${res.ok.length} productos guardados en "por enviar"`); closeSheet();
+    res.ok.forEach(o => { done[o.it.cod] = { s: 'env', l: o.l, t: Date.now() }; }); save(); push(res.ok.map(o => o.it.cod));
+    toast(`${res.ok.length} productos guardados`); closeSheet();
   };
 }
 /* ---------- Sincronización con el servicio central ----------
@@ -895,10 +896,10 @@ function renderDiag(){
   const br = [...x.brands.entries()].map(([m, v]) => ({ m, ...v })).sort((a, b) => (a.r / a.t) - (b.r / b.t) || b.t - a.t);
   el.innerHTML = `${note}${multi ? '<button class="dg-back" id="dgBack">← Todas mis sucursales</button>' : ''}
     <div class="dg-card"><h3>${esc(sLabel(D.s[si][2]))} · semana ${WN}</h3>
-      <div class="dg-kpis"><div><b class="num">${pct(x.rev, x.tot)}%</b><span>${x.rev} de ${x.tot} revisados</span></div><div><b class="num">${x.conV}</b><span>con vencimiento</span></div><div><b class="num">${x.pend}</b><span>por enviar</span></div></div>
+      <div class="dg-kpis"><div><b class="num">${pct(x.rev, x.tot)}%</b><span>${x.rev} de ${x.tot} revisados</span></div><div><b class="num">${x.conV}</b><span>con vencimiento</span></div><div><b class="num">${x.b.venc + x.b.c30}</b><span>u críticas</span></div></div>
       <div class="bar" aria-hidden="true"><i class="b1" style="width:${x.tot ? x.conV / x.tot * 100 : 0}%"></i><i class="b2" style="width:${x.tot ? (x.rev - x.conV) / x.tot * 100 : 0}%"></i></div>
       <span class="lbl">Unidades por vencer</span>${bandHtml(x.b)}
-      <p class="mu" style="margin:0">${x.env} enviados al formulario · ${x.pend} por enviar${x.act ? ` · última actualización ${x.act.toLocaleDateString('es-PA', { day: '2-digit', month: '2-digit' })} ${hhmm(x.act)}` : ''}${x.quien ? ` por ${esc(x.quien)}` : ''}</p></div>
+      <p class="mu" style="margin:0">${x.act ? `Última actualización ${x.act.toLocaleDateString('es-PA', { day: '2-digit', month: '2-digit' })} ${hhmm(x.act)}` : ''}${x.quien ? ` por ${esc(x.quien)}` : ''}</p></div>
     <div class="dg-card"><span class="lbl">Próximos a vencer</span>${x.lots.length ? `<div>${x.lots.slice(0, 25).map(l => { const [c] = band(l.n); return `<div class="dg-lot"><span class="d">${esc(D.p[l.pi][1])}<br><span class="mu">${esc(D.m[D.p[l.pi][4]])} · ${D.p[l.pi][0]}</span></span><span class="num" style="text-align:right;white-space:nowrap"><b>${l.q} u</b><br>${fmtD(l.d)} <span class="pill ${c}">${l.n < 0 ? 'vencido' : l.n + ' d'}</span></span></div>`; }).join('')}</div>${x.lots.length > 25 ? `<p class="mu" style="margin:0">y ${x.lots.length - 25} lotes más.</p>` : ''}` : '<p class="mu" style="margin:0">Todavía no hay vencimientos reportados esta semana.</p>'}</div>
     <div class="dg-card"><span class="lbl">Avance por marca · menor avance primero</span><div>${br.map(b => `<div class="dg-row"><span class="n">${esc(D.m[b.m])}</span><span class="v num">${b.r}/${b.t}</span><span class="bar" aria-hidden="true"><i class="b2" style="width:${b.r / b.t * 100}%"></i></span></div>`).join('')}</div></div>`;
   const bk = $('#dgBack'); if (bk) bk.onclick = () => { dgSel = null; renderDiag(); };

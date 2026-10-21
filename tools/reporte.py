@@ -46,22 +46,22 @@ def libro(dst):
   ws['A1'] = f"Vencimientos en tienda · {dst['nombre']} · cierre al {cierre:%d/%m/%Y}"; ws['A1'].font = Font(name=FONT, bold=True, size=13)
   ws['A2'] = f"Último reporte de cada producto por sucursal (últimos 35 días). Días para vencer contados al {hoy:%d/%m/%Y}. Usa las flechas de los títulos para filtrar."
   ws['A2'].font = Font(name=FONT, size=9, italic=True, color='5A4F50')
-  cols = ['Unidad', 'Zona', 'Sucursal', 'Marca', 'Código', 'Producto', 'Inv. sistema (u)', 'Por vencer (u)', 'Vencimiento', 'Días para vencer', 'Estado', 'Situación', 'Colaborador', 'Fecha de reporte', 'Nuevo ayer']
+  cols = ['Unidad', 'Zona', 'Sucursal', 'Marca', 'Código', 'Producto', 'Inv. sistema (u)', 'Por vencer (u)', 'Vencimiento', 'Días para vencer', 'Estado', 'Colaborador', 'Fecha de reporte', 'Nuevo ayer']
   ws.append([]); ws.append(cols)
   for l in L:
     s = D['s'][names[l['suc']]]
-    ws.append([s[0], corto(s[1]), corto(s[2]), l['marca'], l['cod'], l['prod'], l['inv'], l['u'], l['v'], l['dias'], estado(l['dias']), l['sit'], l['col'], l['reg'], 'Sí' if l['nuevo'] else 'No'])
+    ws.append([s[0], corto(s[1]), corto(s[2]), l['marca'], l['cod'], l['prod'], l['inv'], l['u'], l['v'], l['dias'], estado(l['dias']), l['col'], l['reg'], 'Sí' if l['nuevo'] else 'No'])
   last = max(ws.max_row, 5)
   if ws.max_row == 4: ws.append(['Sin lotes reportados'] + [''] * (len(cols) - 1)); last = 5
   for r in ws.iter_rows(min_row=5, max_row=last):
     for c in r: c.font = Font(name=FONT, size=10)
-    r[4].number_format = '@'; r[8].number_format = 'dd/mm/yyyy'; r[13].number_format = 'dd/mm/yyyy hh:mm'
-  t = Table(displayName='Detalle', ref=f'A4:O{last}'); t.tableStyleInfo = TableStyleInfo(name='TableStyleMedium3', showRowStripes=True)
+    r[4].number_format = '@'; r[8].number_format = 'dd/mm/yyyy'; r[12].number_format = 'dd/mm/yyyy hh:mm'
+  t = Table(displayName='Detalle', ref=f'A4:N{last}'); t.tableStyleInfo = TableStyleInfo(name='TableStyleMedium3', showRowStripes=True)
   ws.add_table(t)
   ws.conditional_formatting.add(f'K5:K{last}', FormulaRule(formula=['OR($K5="Vencido",$K5="Crítico ≤30")'], fill=PatternFill('solid', fgColor='F8E0E0'), font=Font(color='B42828', bold=True)))
   ws.conditional_formatting.add(f'K5:K{last}', CellIsRule(operator='equal', formula=['"Alto 31–60"'], fill=PatternFill('solid', fgColor='FBE6DC'), font=Font(color='A3431C')))
   ws.conditional_formatting.add(f'K5:K{last}', CellIsRule(operator='equal', formula=['"Medio 61+"'], fill=PatternFill('solid', fgColor='FDF1D4'), font=Font(color='8A5A00')))
-  for col, w in zip('ABCDEFGHIJKLMNO', [17, 10, 24, 18, 14, 40, 11, 11, 12, 10, 13, 12, 18, 16, 9]): ws.column_dimensions[col].width = w
+  for col, w in zip('ABCDEFGHIJKLMN', [17, 10, 24, 18, 14, 40, 11, 11, 12, 10, 13, 18, 16, 9]): ws.column_dimensions[col].width = w
   ws.freeze_panes = 'D5'
   # ---------- Resumen por sucursal
   rs = wb.create_sheet('Resumen por sucursal')
