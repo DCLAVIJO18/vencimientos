@@ -24,14 +24,30 @@ corto = lambda s: re.sub(r'^[^|]+\| ', '', s)
 # Último reporte por sucursal + código (todas sus filas con la misma marca de tiempo)
 grupos = collections.defaultdict(list)
 for f in datos['filas']: grupos[(f[3], f[5])].append(f)
+# Inventario en sistema de hoy por sucursal y código (viene en el aplicativo, se actualiza de lunes a viernes)
+inv_hoy = {}
+for si, s in enumerate(D['s']):
+  a = D['i'][si]; inv_hoy[s[2]] = {D['p'][a[k]][0]: a[k + 1] for k in range(0, len(a), 2)}
 lotes = []
 for (suc, cod), fs in grupos.items():
   ult = max(f[13] for f in fs)
+  fs = sorted([f for f in fs if f[13] == ult], key=lambda f: f[10])          # lotes del último conteo, del más próximo a vencer al más lejano
+  inv_conteo = fs[0][7]; hoy_u = inv_hoy.get(suc, {}).get(cod, 0)
+  salio = max(0, inv_conteo - hoy_u)                                         # unidades que salieron desde el conteo (venta, merma, traslado)
+  quedan_max = hoy_u
   for f in fs:
-    if f[13] != ult: continue
     v = dt.date.fromisoformat(f[10][:10]); dias = (v - hoy).days
-    lotes.append({'suc': suc, 'marca': f[4], 'cod': cod, 'prod': f[6], 'inv': f[7], 'sit': f[8], 'u': f[9], 'v': v, 'dias': dias,
-                  'col': f[11], 'reg': dt.datetime.fromisoformat(f[13]), 'nuevo': f[13][:10] == cierre.isoformat()})
+    ajust = max(0, f[9] - salio); salio = max(0, salio - f[9])               # se asume que sale primero lo que vence primero
+    ajust = min(ajust, quedan_max); quedan_max -= ajust                       # nunca más de lo que hay hoy en sistema
+    reg = dt.datetime.fromisoformat(f[13]); edad = (hoy - reg.date()).days
+    lotes.append({'suc': suc, 'marca': f[4], 'cod': cod, 'prod': f[6], 'inv': inv_conteo, 'inv_hoy': hoy_u, 'rep': f[9], 'u': ajust, 'v': v, 'dias': dias,
+                  'col': f[11], 'reg': reg, 'edad': edad, 'nuevo': f[13][:10] == cierre.isoformat()})
+def accion(l):
+  if l['u'] == 0: return 'Ya no hay unidades (vendido o retirado)'
+  if l['dias'] < 0: return 'Retirar del anaquel y registrar merma'
+  if l['edad'] > 7: return 'Recontar (conteo de hace más de 7 días)'
+  if l['dias'] <= 30: return 'Vender con prioridad'
+  return 'Seguimiento'
 estado = lambda d: 'Vencido' if d < 0 else 'Crítico ≤30' if d <= 30 else 'Alto 31–60' if d <= 60 else 'Medio 61+'
 
 FONT = 'Arial'; H = PatternFill('solid', fgColor='D4161E')
@@ -44,24 +60,27 @@ def libro(dst):
   # ---------- Detalle
   ws = wb.active; ws.title = 'Detalle'
   ws['A1'] = f"Vencimientos en tienda · {dst['nombre']} · cierre al {cierre:%d/%m/%Y}"; ws['A1'].font = Font(name=FONT, bold=True, size=13)
-  ws['A2'] = f"Último reporte de cada producto por sucursal (últimos 35 días). Días para vencer contados al {hoy:%d/%m/%Y}. Usa las flechas de los títulos para filtrar."
+  ws['A2'] = f"Último conteo de cada producto por sucursal (últimos 35 días), ajustado con el inventario en sistema. Días contados al {hoy:%d/%m/%Y}. Usa las flechas de los títulos para filtrar."
   ws['A2'].font = Font(name=FONT, size=9, italic=True, color='5A4F50')
-  cols = ['Unidad', 'Zona', 'Sucursal', 'Marca', 'Código', 'Producto', 'Inv. sistema (u)', 'Por vencer (u)', 'Vencimiento', 'Días para vencer', 'Estado', 'Colaborador', 'Fecha de reporte', 'Nuevo ayer']
+  cols = ['Unidad', 'Zona', 'Sucursal', 'Marca', 'Código', 'Producto', 'Inv. al conteo (u)', 'Inv. sistema hoy (u)', 'Reportado (u)', 'Por vencer ajustado (u)', 'Vencimiento', 'Días para vencer', 'Estado', 'Acción', 'Colaborador', 'Fecha del conteo', 'Días desde el conteo', 'Nuevo ayer']
   ws.append([]); ws.append(cols)
   for l in L:
     s = D['s'][names[l['suc']]]
-    ws.append([s[0], corto(s[1]), corto(s[2]), l['marca'], l['cod'], l['prod'], l['inv'], l['u'], l['v'], l['dias'], estado(l['dias']), l['col'], l['reg'], 'Sí' if l['nuevo'] else 'No'])
+    ws.append([s[0], corto(s[1]), corto(s[2]), l['marca'], l['cod'], l['prod'], l['inv'], l['inv_hoy'], l['rep'], l['u'], l['v'], l['dias'], estado(l['dias']), accion(l), l['col'], l['reg'], l['edad'], 'Sí' if l['nuevo'] else 'No'])
   last = max(ws.max_row, 5)
   if ws.max_row == 4: ws.append(['Sin lotes reportados'] + [''] * (len(cols) - 1)); last = 5
   for r in ws.iter_rows(min_row=5, max_row=last):
     for c in r: c.font = Font(name=FONT, size=10)
-    r[4].number_format = '@'; r[8].number_format = 'dd/mm/yyyy'; r[12].number_format = 'dd/mm/yyyy hh:mm'
-  t = Table(displayName='Detalle', ref=f'A4:N{last}'); t.tableStyleInfo = TableStyleInfo(name='TableStyleMedium3', showRowStripes=True)
+    r[4].number_format = '@'; r[10].number_format = 'dd/mm/yyyy'; r[15].number_format = 'dd/mm/yyyy hh:mm'; r[9].font = Font(name=FONT, size=10, bold=True)
+  t = Table(displayName='Detalle', ref=f'A4:R{last}'); t.tableStyleInfo = TableStyleInfo(name='TableStyleMedium3', showRowStripes=True)
   ws.add_table(t)
-  ws.conditional_formatting.add(f'K5:K{last}', FormulaRule(formula=['OR($K5="Vencido",$K5="Crítico ≤30")'], fill=PatternFill('solid', fgColor='F8E0E0'), font=Font(color='B42828', bold=True)))
-  ws.conditional_formatting.add(f'K5:K{last}', CellIsRule(operator='equal', formula=['"Alto 31–60"'], fill=PatternFill('solid', fgColor='FBE6DC'), font=Font(color='A3431C')))
-  ws.conditional_formatting.add(f'K5:K{last}', CellIsRule(operator='equal', formula=['"Medio 61+"'], fill=PatternFill('solid', fgColor='FDF1D4'), font=Font(color='8A5A00')))
-  for col, w in zip('ABCDEFGHIJKLMN', [17, 10, 24, 18, 14, 40, 11, 11, 12, 10, 13, 18, 16, 9]): ws.column_dimensions[col].width = w
+  ws.conditional_formatting.add(f'M5:M{last}', FormulaRule(formula=['OR($M5="Vencido",$M5="Crítico ≤30")'], fill=PatternFill('solid', fgColor='F8E0E0'), font=Font(color='B42828', bold=True)))
+  ws.conditional_formatting.add(f'M5:M{last}', CellIsRule(operator='equal', formula=['"Alto 31–60"'], fill=PatternFill('solid', fgColor='FBE6DC'), font=Font(color='A3431C')))
+  ws.conditional_formatting.add(f'M5:M{last}', CellIsRule(operator='equal', formula=['"Medio 61+"'], fill=PatternFill('solid', fgColor='FDF1D4'), font=Font(color='8A5A00')))
+  for col, w in zip('ABCDEFGHIJKLMNOPQR', [17, 10, 24, 18, 14, 40, 10, 11, 10, 12, 12, 10, 13, 34, 18, 16, 10, 9]): ws.column_dimensions[col].width = w
+  ws.conditional_formatting.add(f'N5:N{last}', FormulaRule(formula=['LEFT($N5,7)="Retirar"'], font=Font(color='B42828', bold=True)))
+  ws.conditional_formatting.add(f'N5:N{last}', FormulaRule(formula=['LEFT($N5,8)="Recontar"'], font=Font(color='8A5A00', bold=True)))
+  ws.conditional_formatting.add(f'Q5:Q{last}', CellIsRule(operator='greaterThan', formula=['7'], fill=PatternFill('solid', fgColor='FDF1D4')))
   ws.freeze_panes = 'D5'
   # ---------- Resumen por sucursal
   rs = wb.create_sheet('Resumen por sucursal')
